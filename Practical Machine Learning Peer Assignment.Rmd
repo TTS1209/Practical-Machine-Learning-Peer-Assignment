@@ -1,0 +1,129 @@
+---
+title: "Practical Machine Learning Peer Assignment"
+author: "Tan Tong Sheng"
+date: "March 10, 2017"
+output: html_document
+---
+*Title : Practical Machine Learning Peer Assignment*
+
+*1) Executive Summary*
+*This report uses machine learning algorithms to predict the manners of Human Activity Recognition. Six participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E). This report will describe how the data captured are used to identify the parameters involved in predicting the movement involved based on the above classification, and then to predict the movement for 20 test cases. Three machine learning algorithm are used in prediction such as Random Forest, Decision Tree, Generalized Boosted Model. Random forest is found to be the most accuracy and used to answer 20 quiz.*
+
+*2) Data Processing*
+
+*(a) Loading packages and Reading data* 
+```{r echo=TRUE,message=FALSE,warning=FALSE}
+#Setting environment
+library(knitr)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+library(corrplot)
+set.seed(12345)
+
+#Data loading for train and test data
+UrlTrain <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+UrlTest <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+#Download the dataset
+training <- read.csv(url(UrlTrain))
+testing <- read.csv(url(UrlTest))
+
+#Create a partition with the training dataset 
+inTrain <- createDataPartition(training$classe, p=0.7, list = FALSE)
+TrainSet <- training[inTrain, ]
+TestSet <- training[-inTrain, ]
+dim(TrainSet)
+dim(TestSet)
+```
+
+*Both dataset shows there are 160 variables. They have plenty of NA that needed to remove from the dataset.*
+*(b) Cleaning dataset*
+```{r echo=TRUE,message=FALSE,warning=FALSE}
+#Remove variables with Nearly Zero Variables
+NZV <- nearZeroVar(TrainSet)
+TrainSet <- TrainSet[, -NZV]
+TestSet <- TestSet[, -NZV]
+dim(TrainSet)
+dim(TestSet)
+
+#Remove variables that are mostly NA
+AllNA <- sapply(TrainSet, function(x) mean(is.na(x))) > 0.95
+TrainSet <- TrainSet[, AllNA==FALSE]
+TestSet <- TestSet[, AllNA==FALSE]
+dim(TrainSet)
+dim(TestSet)
+# remove identification only variables (columns 1 to 5)
+TrainSet <- TrainSet[, -(1:5)]
+TestSet  <- TestSet[, -(1:5)]
+dim(TrainSet)
+dim(TestSet)
+```
+*After cleaning the dataset, the number of variables for the analysis has been reduced to 54.*
+
+*(c) Correlation Analysis*
+*A correlation among variables is analysed before proceed to further analysis.*
+```{r echo=TRUE,message=FALSE,warning=FALSE}
+corMatrix <- cor(TrainSet[, -54])
+corrplot(corMatrix, order = 'FPC', method = 'color',type = 'lower',t1.cex = 0.8, t1.col = rgb(0, 0, 0))
+```
+*The highly correlated variables are shown in dark colours. However, as the correlations are quite few, Principal Component Analysis is not needed for the pre-processing.*
+
+*3) Prediction Model Building*
+*Random forest, decision trees and generalized boosted model are used to model the regression (in the Train dataset) and model with higher accuracy will be applied for the quiz questions. A confusion matrix is plotted at the end of each analysis to visualize the accuracy of the models.*
+*(a) Random Forest*
+```{r echo=TRUE,message=FALSE,warning=FALSE}
+#model fit
+set.seed(12345)
+controlRF <- trainControl(method='cv',number=3,verboseIter=FALSE)
+modFitRandForest <- train(classe ~ ., data=TrainSet, method='rf',trControl=controlRF)
+modFitRandForest$finalModel
+#prediction on Test dataset
+predictRandForest <- predict(modFitRandForest,newdata=TestSet)
+confMatRandForest <- confusionMatrix(predictRandForest, TestSet$classe)
+confMatRandForest
+#plot matrix results
+plot(confMatRandForest$table, col=confMatRandForest$byClass, main=paste("Random Forest - Accuracy =",round(confMatRandForest$overall['Accuracy'],4)))
+```
+*(b) Decision Trees*
+```{r echo=TRUE,message=FALSE,warning=FALSE}
+#model fit
+set.seed(12345)
+modFitDecTree <- rpart(classe ~ ., data=TrainSet, method="class")
+fancyRpartPlot(modFitDecTree)
+#prediction on Test dataset
+predictDecTree <- predict(modFitDecTree,newdata=TestSet, type="class")
+confMatDecTree <- confusionMatrix(predictDecTree,TestSet$classe)
+confMatDecTree
+#plot matrix results
+plot(confMatDecTree$table, col = confMatDecTree$byClass, main = paste("Decision Tree - Accuracy =",
+round(confMatDecTree$overall['Accuracy'], 4)))
+```
+*(c) Generalized Boosted Model*
+```{r echo=TRUE,message=FALSE,warning=FALSE}
+#model fit
+set.seed(12345)
+controlGBM <- trainControl(method='repeatedcv',number=5,repeats=1)
+modFitGBM <- train(classe ~ ., data=TrainSet, method="gbm",trControl=controlGBM,verbose=FALSE)
+modFitGBM$finalModel
+#predict on Test dataset
+predictGBM <- predict(modFitGBM, newdata=TestSet)
+confMatGBM <- confusionMatrix(predictGBM, TestSet$classe)
+confMatGBM
+#plot matrix results
+plot(confMatGBM$table,col=confMatGBM$byClass,main=paste("GBM - Accuracy=",round(confMatGBM$overall['Accuracy'],4)))
+```
+*4)Applying the Selected Model to the Test Data*
+*The accuracy of the 3 regression modeling methods above are:*
+*(a) Random Forest: 0.9964*
+*(b) Decision Tree: 0.7368*
+*(c) GBM: 0.9859*
+
+*Therefore, the random forest model will be applied to predict the 20 quiz results as shown below*
+```{r echo=TRUE,message=FALSE,warning=FALSE}
+predictTEST <- predict(modFitRandForest,newdata=testing)
+predictTEST
+```
+
